@@ -1,57 +1,51 @@
 import time
 from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
-from pymongo import MongoClient
 
 
 def mail_site():
-    driver = webdriver.Chrome('./chromedriver.exe')
+    chrome_options = Options()
+    chrome_options.add_argument('start-maximized')
+    driver = webdriver.Chrome('./chromedriver.exe', options=chrome_options)
     driver.get('https://mail.ru')
-    elem = driver.find_element_by_id('mailbox:login')
-    elem.send_keys('study.ai_172@mail.ru')
-    elem.send_keys(Keys.ENTER)
+    login = driver.find_element_by_id('mailbox:login')
+    login.send_keys('study.ai_172@mail.ru')
+    login.send_keys(Keys.ENTER)
     time.sleep(0.9)
-    elem = driver.find_element_by_id('mailbox:password')
-    elem.send_keys('NextPassword172')
-    elem.send_keys(Keys.ENTER)
+    password = driver.find_element_by_id('mailbox:password')
+    password.send_keys('NextPassword172')
+    password.send_keys(Keys.ENTER)
     time.sleep(8)
-    letters_class_name = 'llc js-tooltip-direction_letter-bottom js-letter-list-item llc_normal'
-    len_letters = len(driver.find_elements_by_xpath(f'//a[contains(@class, "{letters_class_name}")]'))
+    mail_links = set()
+    last_block = None
+    while True:
+        time.sleep(7)
+        block = driver.find_elements_by_class_name('js-letter-list-item')
+        for value in block:
+            mail_links.add(value.get_attribute('href'))
+        if block[-1] != last_block:
+            last_block = block[-1]
+            actions = ActionChains(driver)
+            actions.move_to_element(last_block)
+            actions.perform()
+        else:
+            break
     letters_all = []
-    for i in range(len_letters):
-        letters = driver.find_elements_by_xpath(f'//a[contains(@class, "{letters_class_name}")]')
-        letters[i].click()
+    for link in mail_links:
+        driver.get(link)
         time.sleep(3)
-        letter_author = driver.find_element_by_class_name('letter__contact-item').text
-        letter_date = driver.find_element_by_class_name('letter__date').text
         letter_topic = driver.find_element_by_class_name('thread__subject').text
+        letter_date = driver.find_element_by_class_name('letter__date').text
         letter_content = driver.find_element_by_class_name('letter-body').text
-        letters_all.append({'author': letter_author,
-                            'date': letter_date,
+        letters_all.append({'date': letter_date,
                             'topic': letter_topic,
                             'content': letter_content})
         driver.get('https://e.mail.ru/inbox/')
         time.sleep(3)
     driver.quit()
-    return letters_all
+    print(len(letters_all))
 
 
-def mongoDB_data():
-    client = MongoClient('local_host', 27017)
-    data_base = client['db_mail_letters']  # db name
-    mail_letters = data_base.mail_letters  # collection name
-    return mail_letters
-
-
-def save_to_mongoDB(letters: list):
-    mail_letters = mongoDB_data()
-    count = 0
-    for letter in letters:
-        spam = mail_letters.find_one({'content': letter['content']})
-        if spam is None:
-            mail_letters.insert_one(letter)
-            count += 1
-    print(f'Added {count} records. Collection "{mail_letters.name}" has {mail_letters.count_documents({})} letters')
-
-
-save_to_mongoDB(mail_site())
+mail_site()
